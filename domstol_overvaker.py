@@ -47,7 +47,7 @@ def send_slack_varsel(sak_info):
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        f"🚨 *Viktig: Relevant TVI-sak funnet!* 🚨\n\n"
+                        f"🚨 Ny TVI-sak funnet!* 🚨\n\n"
                         f"*Rettsmøte:* {sak_info['rettsmoete']}\n"
                         f"*Saksnr:* {sak_info['saksnr']}\n"
                         f"*Domstol:* {sak_info['domstol']}\n"
@@ -59,7 +59,7 @@ def send_slack_varsel(sak_info):
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Se på Domstol.no"}, "url": sak_info['sakslenke'], "style": "primary"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Åpne saken direkte"}, "url": sak_info['sakslenke'], "style": "primary"},
                     {"type": "button", "text": {"type": "plain_text", "text": "Innsynskrav (Gmail)"}, "url": gmail_url}
                 ]
             }
@@ -74,7 +74,7 @@ def main():
     options.add_argument("--disable-dev-shm-usage")
     
     driver = webdriver.Chrome(options=options)
-    sendte_varsler = les_cache() # Inneholder nå "saksnr_dato"
+    sendte_varsler = les_cache()
     
     try:
         driver.get(URL)
@@ -91,15 +91,23 @@ def main():
             cols = rad.find_elements(By.TAG_NAME, "td")
             if len(cols) < 5: continue
             
-            saksnr = cols[1].text.strip()
+            saksnr_celle = cols[1]
+            saksnr = saksnr_celle.text.strip()
             rettsmoete_full = cols[0].text.strip()
-            dato_str = rettsmoete_full.split()[0] # f.eks. "15.02.2026"
+            dato_str = rettsmoete_full.split()[0]
             
-            # Lag en unik ID for denne saken på denne datoen
             cache_id = f"{saksnr}_{dato_str}"
             
             if "TVI" in saksnr and cache_id not in sendte_varsler:
                 try:
+                    # Hent den direkte lenken fra saksnummer-kolonnen
+                    try:
+                        lenke_element = saksnr_celle.find_element(By.TAG_NAME, "a")
+                        sakslenke = lenke_element.get_attribute("href")
+                    except:
+                        # Fallback til hoved-URL hvis lenken ikke finnes
+                        sakslenke = URL
+
                     sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
                     
                     if i_dag <= sak_dato <= grense:
@@ -109,12 +117,11 @@ def main():
                             'domstol': cols[2].text.strip(),
                             'saken_gjelder': cols[3].text.strip(),
                             'parter': cols[4].text.strip(),
-                            'sakslenke': URL
+                            'sakslenke': sakslenke
                         })
-                        # Lagre med tidspunktet den ble sendt
                         sendte_varsler[cache_id] = datetime.now().isoformat()
                 except Exception as e:
-                    print(f"Kunne ikke prosessere rad: {e}")
+                    print(f"Feil ved rad: {e}")
                     
         skriv_cache(sendte_varsler)
     finally:
