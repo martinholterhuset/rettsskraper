@@ -1,0 +1,38 @@
+name: Domstol TVI-overvåker
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Kl 10:00 norsk tid
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  overvak:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install requests selenium webdriver-manager
+      
+      - name: Run scraper
+        env:
+          SLACK_WEBHOOK_1: ${{ secrets.SLACK_WEBHOOK_1 }}
+        run: python domstol_overvaker.py
+      
+      - name: Commit cache updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f cache.json ]; then
+            git add cache.json
+            git diff --quiet && git diff --staged --quiet || (git commit -m "Update cache [skip ci]" && git push)
+          fi
