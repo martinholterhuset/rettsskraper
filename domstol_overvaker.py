@@ -30,7 +30,7 @@ def skriv_cache(cache):
 
 def send_slack_varsel(sak_info):
     mottaker = "romerike.og.glamdal.tingrett@domstol.no"
-    emne = "Innsyn i sluttinnlegg"
+    emne = f"Innsyn i sluttinnlegg - {sak_info['saksnr']}"
     innhold = f"Hei\n\nRomerikes Blad ber om innsyn i sluttinnleggene i {sak_info['saksnr']}."
     
     gmail_url = (
@@ -47,7 +47,7 @@ def send_slack_varsel(sak_info):
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        f"🚨 *Ny TVI-sak funnet innen 14 dager!* 🚨\n\n"
+                        f"🚨 *Viktig: Relevant TVI-sak funnet!* 🚨\n\n"
                         f"*Rettsmøte:* {sak_info['rettsmoete']}\n"
                         f"*Saksnr:* {sak_info['saksnr']}\n"
                         f"*Domstol:* {sak_info['domstol']}\n"
@@ -59,8 +59,8 @@ def send_slack_varsel(sak_info):
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Se saken på Domstol.no"}, "url": sak_info['sakslenke'], "style": "primary"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Send innsynskrav (Gmail)"}, "url": gmail_url}
+                    {"type": "button", "text": {"type": "plain_text", "text": "Se på Domstol.no"}, "url": sak_info['sakslenke'], "style": "primary"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Innsynskrav (Gmail)"}, "url": gmail_url}
                 ]
             }
         ]
@@ -74,11 +74,11 @@ def main():
     options.add_argument("--disable-dev-shm-usage")
     
     driver = webdriver.Chrome(options=options)
-    sendte_saker = les_cache()
+    sendte_varsler = les_cache() # Inneholder nå "saksnr_dato"
     
     try:
         driver.get(URL)
-        time.sleep(10) # Venter på React
+        time.sleep(10) 
         
         wait = WebDriverWait(driver, 30)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
@@ -92,21 +92,31 @@ def main():
             if len(cols) < 5: continue
             
             saksnr = cols[1].text.strip()
-            if "TVI" in saksnr and saksnr not in sendte_saker:
-                dato_str = cols[0].text.strip().split()[0]
-                sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
-                
-                if i_dag <= sak_dato <= grense:
-                    send_slack_varsel({
-                        'rettsmoete': cols[0].text.strip(),
-                        'saksnr': saksnr,
-                        'domstol': cols[2].text.strip(),
-                        'saken_gjelder': cols[3].text.strip(),
-                        'parter': cols[4].text.strip(),
-                        'sakslenke': URL
-                    })
-                    sendte_saker[saksnr] = datetime.now().isoformat()
-        skriv_cache(sendte_saker)
+            rettsmoete_full = cols[0].text.strip()
+            dato_str = rettsmoete_full.split()[0] # f.eks. "15.02.2026"
+            
+            # Lag en unik ID for denne saken på denne datoen
+            cache_id = f"{saksnr}_{dato_str}"
+            
+            if "TVI" in saksnr and cache_id not in sendte_varsler:
+                try:
+                    sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
+                    
+                    if i_dag <= sak_dato <= grense:
+                        send_slack_varsel({
+                            'rettsmoete': rettsmoete_full,
+                            'saksnr': saksnr,
+                            'domstol': cols[2].text.strip(),
+                            'saken_gjelder': cols[3].text.strip(),
+                            'parter': cols[4].text.strip(),
+                            'sakslenke': URL
+                        })
+                        # Lagre med tidspunktet den ble sendt
+                        sendte_varsler[cache_id] = datetime.now().isoformat()
+                except Exception as e:
+                    print(f"Kunne ikke prosessere rad: {e}")
+                    
+        skriv_cache(sendte_varsler)
     finally:
         driver.quit()
 
