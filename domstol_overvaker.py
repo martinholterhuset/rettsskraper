@@ -47,7 +47,7 @@ def send_slack_varsel(sak_info):
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        f"🚨 Ny TVI-sak funnet!* 🚨\n\n"
+                        f"🚨 Ny tvistesak funnet! 🚨\n\n"
                         f"*Rettsmøte:* {sak_info['rettsmoete']}\n"
                         f"*Saksnr:* {sak_info['saksnr']}\n"
                         f"*Domstol:* {sak_info['domstol']}\n"
@@ -59,8 +59,8 @@ def send_slack_varsel(sak_info):
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Åpne saken direkte"}, "url": sak_info['sakslenke'], "style": "primary"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Innsynskrav (Gmail)"}, "url": gmail_url}
+                    {"type": "button", "text": {"type": "plain_text", "text": "Åpne saken"}, "url": sak_info['sakslenke'], "style": "primary"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Send innsynskrav"}, "url": gmail_url}
                 ]
             }
         ]
