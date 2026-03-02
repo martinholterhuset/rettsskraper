@@ -1,13 +1,10 @@
 name: Domstol TVI-overvåker
-
 on:
   schedule:
     - cron: '0 9 * * *' # Kl 10:00 norsk tid
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   overvak:
     runs-on: ubuntu-latest
@@ -36,11 +33,12 @@ jobs:
             git add cache.json
             git diff --quiet && git diff --staged --quiet || (git commit -m "Update cache [skip ci]" && git push)
           fi
-- name: Upload screenshots
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: screenshots
-    path: |
-      before_click.png
-      after_click.png
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: |
+            before_click.png
+            after_click.png
