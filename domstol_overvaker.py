@@ -72,6 +72,9 @@ def main():
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--incognito")
+    options.add_argument("--disable-cache")
+    options.add_argument("--disk-cache-size=0")
     
     driver = webdriver.Chrome(options=options)
     sendte_varsler = les_cache()
@@ -102,11 +105,8 @@ def main():
             except Exception as e2:
                 print(f"Andre forsøk feilet: {e2}")
 
-        # Vent på at skjemaet er lastet og skriv ut HTML for feilsøking
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "main")))
-        print("=== PAGE SOURCE (første 5000 tegn) ===")
-        print(driver.page_source[:5000])
-        print("=== SLUTT PAGE SOURCE ===")
+        # Skriv ut URL som faktisk lastes
+        print("Faktisk URL:", driver.current_url)
 
         # Ta screenshot før klikk
         driver.save_screenshot("before_click.png")
