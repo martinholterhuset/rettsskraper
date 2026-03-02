@@ -117,7 +117,9 @@ def main():
             for knapp in knapper:
                 print(f"Knapp: '{knapp.text}' | class: '{knapp.get_attribute('class')}'")
 
-        time.sleep(5)
+        time.sleep(10)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
 
         # Ta screenshot etter klikk
         driver.save_screenshot("after_click.png")
