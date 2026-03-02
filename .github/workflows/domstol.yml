@@ -36,3 +36,11 @@ jobs:
             git add cache.json
             git diff --quiet && git diff --staged --quiet || (git commit -m "Update cache [skip ci]" && git push)
           fi
+- name: Upload screenshots
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: screenshots
+    path: |
+      before_click.png
+      after_click.png
