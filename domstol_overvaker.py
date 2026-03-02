@@ -102,6 +102,12 @@ def main():
             except Exception as e2:
                 print(f"Andre forsøk feilet: {e2}")
 
+        # Vent på at skjemaet er lastet og skriv ut HTML for feilsøking
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "main")))
+        print("=== PAGE SOURCE (første 5000 tegn) ===")
+        print(driver.page_source[:5000])
+        print("=== SLUTT PAGE SOURCE ===")
+
         # Ta screenshot før klikk
         driver.save_screenshot("before_click.png")
         print("Side-tittel:", driver.title)
