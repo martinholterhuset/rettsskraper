@@ -91,7 +91,6 @@ def main():
         except Exception as e:
             print(f"Første forsøk feilet: {e}")
             try:
-                # Alternativ: klikk via JavaScript
                 knapper = driver.find_elements(By.TAG_NAME, "button")
                 for knapp in knapper:
                     print(f"Fant knapp: '{knapp.text}'")
@@ -107,13 +106,16 @@ def main():
         driver.save_screenshot("before_click.png")
         print("Side-tittel:", driver.title)
 
-        # Klikk på Søk-knappen
+        # Klikk på Søk-knappen i skjemaet (ikke navigasjonssøket)
         try:
-            sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[.//span[text()='Søk']]")))
+            sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//main//button[contains(@class, 'Button_button--primary')]")))
             sok_knapp.click()
             print("Søk-knappen klikket!")
         except Exception as e:
             print(f"Fant ikke Søk-knappen: {e}")
+            knapper = driver.find_elements(By.TAG_NAME, "button")
+            for knapp in knapper:
+                print(f"Knapp: '{knapp.text}' | class: '{knapp.get_attribute('class')}'")
 
         time.sleep(5)
 
