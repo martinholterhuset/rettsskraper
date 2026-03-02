@@ -89,54 +89,32 @@ def main():
         try:
             cookie_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Kun nødvendige')]")))
             cookie_knapp.click()
-            print("Cookie-banner lukket!")
             time.sleep(3)
-        except Exception as e:
-            print(f"Første forsøk feilet: {e}")
+        except Exception:
             try:
                 knapper = driver.find_elements(By.TAG_NAME, "button")
                 for knapp in knapper:
                     if "nødvendige" in knapp.text.lower():
                         driver.execute_script("arguments[0].click();", knapp)
-                        print("Cookie-banner lukket via JavaScript!")
                         time.sleep(3)
                         break
-            except Exception as e2:
-                print(f"Andre forsøk feilet: {e2}")
-
-        # Ta screenshot før utfylling
-        driver.save_screenshot("before_click.png")
+            except Exception:
+                pass
 
         # Velg domstol fra dropdown
-        try:
-            domstol_dropdown = wait.until(EC.presence_of_element_located((By.NAME, "domstolid")))
-            select = Select(domstol_dropdown)
-            select.select_by_visible_text("Romerike og Glåmdal tingrett")
-            print("Domstol valgt!")
-            time.sleep(2)
-        except Exception as e:
-            print(f"Fant ikke domstol-dropdown: {e}")
-            try:
-                opts = driver.find_elements(By.XPATH, "//select[@name='domstolid']/option")
-                for opt in opts:
-                    print(f"Option: '{opt.text}' value='{opt.get_attribute('value')}'")
-            except Exception as e2:
-                print(f"Fant ikke options: {e2}")
-
-        # Klikk på Søk-knappen
-        try:
-            sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//main//button[contains(@class, 'Button_button--primary')]")))
-            sok_knapp.click()
-            print("Søk-knappen klikket!")
-        except Exception as e:
-            print(f"Fant ikke Søk-knappen: {e}")
-
-        time.sleep(10)
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        domstol_dropdown = wait.until(EC.presence_of_element_located((By.NAME, "domstolid")))
+        select = Select(domstol_dropdown)
+        select.select_by_visible_text("Romerike og Glåmdal tingrett")
         time.sleep(2)
 
-        # Ta screenshot etter klikk
+        # Klikk den siste Søk-knappen (ikke navigasjonsknappen)
+        sok_knapper = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//button[.//span[text()='Søk']]")))
+        driver.execute_script("arguments[0].click();", sok_knapper[-1])
+        time.sleep(10)
+
+        # Feilsøking: screenshot og HTML
         driver.save_screenshot("after_click.png")
+        print(driver.page_source[3000:8000])
 
         # Vent på tabell
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
