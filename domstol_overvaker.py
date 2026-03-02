@@ -84,12 +84,24 @@ def main():
 
         # Lukk cookie-banner
         try:
-            cookie_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Kun nødvendige']")))
+            cookie_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Kun nødvendige')]")))
             cookie_knapp.click()
             print("Cookie-banner lukket!")
             time.sleep(3)
         except Exception as e:
-            print(f"Fant ikke cookie-banner: {e}")
+            print(f"Første forsøk feilet: {e}")
+            try:
+                # Alternativ: klikk via JavaScript
+                knapper = driver.find_elements(By.TAG_NAME, "button")
+                for knapp in knapper:
+                    print(f"Fant knapp: '{knapp.text}'")
+                    if "nødvendige" in knapp.text.lower():
+                        driver.execute_script("arguments[0].click();", knapp)
+                        print("Cookie-banner lukket via JavaScript!")
+                        time.sleep(3)
+                        break
+            except Exception as e2:
+                print(f"Andre forsøk feilet: {e2}")
 
         # Ta screenshot før klikk
         driver.save_screenshot("before_click.png")
