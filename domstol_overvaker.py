@@ -7,12 +7,12 @@ from pathlib import Path
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 # --- KONFIGURASJON ---
-BASE_URL = "https://www.domstol.no/no/nar-gar-rettssaken/"
+URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-02-16&tilDato=2026-12-31&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000&page=1"
 CACHE_FILE = Path("cache.json")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_1")
 
@@ -80,7 +80,7 @@ def main():
     sendte_varsler = les_cache()
     
     try:
-        driver.get(BASE_URL)
+        driver.get(URL)
         time.sleep(10)
 
         wait = WebDriverWait(driver, 30)
@@ -101,24 +101,14 @@ def main():
             except Exception:
                 pass
 
-        # Velg domstol fra dropdown
-        domstol_dropdown = wait.until(EC.presence_of_element_located((By.NAME, "domstolid")))
-        select = Select(domstol_dropdown)
-        select.select_by_visible_text("Romerike og Glåmdal tingrett")
-        time.sleep(2)
-
         # Klikk den siste Søk-knappen (ikke navigasjonsknappen)
         sok_knapper = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//button[.//span[text()='Søk']]")))
         driver.execute_script("arguments[0].click();", sok_knapper[-1])
         time.sleep(10)
 
-        # Feilsøking: screenshot og HTML
-        driver.save_screenshot("after_click.png")
-        print(driver.page_source[3000:8000])
-
         # Vent på tabell
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-        
+
         rader = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]
         i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         grense = i_dag + timedelta(days=14)
@@ -140,7 +130,7 @@ def main():
                         lenke_element = saksnr_celle.find_element(By.TAG_NAME, "a")
                         sakslenke = lenke_element.get_attribute("href")
                     except:
-                        sakslenke = BASE_URL
+                        sakslenke = URL
 
                     sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
                     
