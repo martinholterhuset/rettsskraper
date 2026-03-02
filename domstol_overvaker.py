@@ -80,14 +80,22 @@ def main():
         driver.get(URL)
         time.sleep(10)
 
-        # Ta screenshot før klikk
-        driver.save_screenshot("before_click.png")
-        print("Screenshot tatt: before_click.png")
-        print("Side-tittel:", driver.title)
-
         wait = WebDriverWait(driver, 30)
 
-        # Prøv å klikke Søk-knappen
+        # Lukk cookie-banner
+        try:
+            cookie_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Kun nødvendige']")))
+            cookie_knapp.click()
+            print("Cookie-banner lukket!")
+            time.sleep(3)
+        except Exception as e:
+            print(f"Fant ikke cookie-banner: {e}")
+
+        # Ta screenshot før klikk
+        driver.save_screenshot("before_click.png")
+        print("Side-tittel:", driver.title)
+
+        # Klikk på Søk-knappen
         try:
             sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[.//span[text()='Søk']]")))
             sok_knapp.click()
@@ -99,7 +107,6 @@ def main():
 
         # Ta screenshot etter klikk
         driver.save_screenshot("after_click.png")
-        print("Screenshot tatt: after_click.png")
 
         # Vent på tabell
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
