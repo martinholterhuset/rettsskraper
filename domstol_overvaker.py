@@ -78,9 +78,15 @@ def main():
     
     try:
         driver.get(URL)
-        time.sleep(10) 
-        
+        time.sleep(10)
+
         wait = WebDriverWait(driver, 30)
+
+        # Klikk på Søk-knappen først
+        sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[.//span[text()='Søk']]")))
+        sok_knapp.click()
+
+        # Vent på at tabellen dukker opp
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
         
         rader = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]
@@ -100,12 +106,10 @@ def main():
             
             if "TVI" in saksnr and cache_id not in sendte_varsler:
                 try:
-                    # Hent den direkte lenken fra saksnummer-kolonnen
                     try:
                         lenke_element = saksnr_celle.find_element(By.TAG_NAME, "a")
                         sakslenke = lenke_element.get_attribute("href")
                     except:
-                        # Fallback til hoved-URL hvis lenken ikke finnes
                         sakslenke = URL
 
                     sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
