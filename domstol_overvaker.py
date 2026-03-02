@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 # --- KONFIGURASJON ---
-URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-02-14&tilDato=2026-12-31&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000"
+BASE_URL = "https://www.domstol.no/no/nar-gar-rettssaken/"
 CACHE_FILE = Path("cache.json")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_1")
 
@@ -80,7 +80,7 @@ def main():
     sendte_varsler = les_cache()
     
     try:
-        driver.get(URL)
+        driver.get(BASE_URL)
         time.sleep(10)
 
         wait = WebDriverWait(driver, 30)
@@ -96,7 +96,6 @@ def main():
             try:
                 knapper = driver.find_elements(By.TAG_NAME, "button")
                 for knapp in knapper:
-                    print(f"Fant knapp: '{knapp.text}'")
                     if "nødvendige" in knapp.text.lower():
                         driver.execute_script("arguments[0].click();", knapp)
                         print("Cookie-banner lukket via JavaScript!")
@@ -105,23 +104,30 @@ def main():
             except Exception as e2:
                 print(f"Andre forsøk feilet: {e2}")
 
-        # Skriv ut URL som faktisk lastes
-        print("Faktisk URL:", driver.current_url)
-
-        # Ta screenshot før klikk
+        # Ta screenshot før utfylling
         driver.save_screenshot("before_click.png")
-        print("Side-tittel:", driver.title)
 
-        # Klikk på Søk-knappen i skjemaet (ikke navigasjonssøket)
+        # Fyll ut domstol-feltet
+        try:
+            domstol_felt = wait.until(EC.presence_of_element_located((By.XPATH, "//input[contains(@placeholder, 'domstol') or contains(@id, 'domstol') or contains(@name, 'domstol')]")))
+            domstol_felt.clear()
+            domstol_felt.send_keys("Romerike og Glåmdal")
+            time.sleep(2)
+            print("Domstol fylt ut!")
+        except Exception as e:
+            print(f"Fant ikke domstol-felt: {e}")
+            # Skriv ut alle input-felter for feilsøking
+            felter = driver.find_elements(By.TAG_NAME, "input")
+            for felt in felter:
+                print(f"Input: id='{felt.get_attribute('id')}' name='{felt.get_attribute('name')}' placeholder='{felt.get_attribute('placeholder')}'")
+
+        # Klikk på Søk-knappen
         try:
             sok_knapp = wait.until(EC.element_to_be_clickable((By.XPATH, "//main//button[contains(@class, 'Button_button--primary')]")))
             sok_knapp.click()
             print("Søk-knappen klikket!")
         except Exception as e:
             print(f"Fant ikke Søk-knappen: {e}")
-            knapper = driver.find_elements(By.TAG_NAME, "button")
-            for knapp in knapper:
-                print(f"Knapp: '{knapp.text}' | class: '{knapp.get_attribute('class')}'")
 
         time.sleep(10)
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -154,7 +160,7 @@ def main():
                         lenke_element = saksnr_celle.find_element(By.TAG_NAME, "a")
                         sakslenke = lenke_element.get_attribute("href")
                     except:
-                        sakslenke = URL
+                        sakslenke = BASE_URL
 
                     sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
                     
