@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
@@ -107,19 +107,21 @@ def main():
         # Ta screenshot før utfylling
         driver.save_screenshot("before_click.png")
 
-        # Fyll ut domstol-feltet
+        # Velg domstol fra dropdown
         try:
-            domstol_felt = wait.until(EC.presence_of_element_located((By.XPATH, "//input[contains(@placeholder, 'domstol') or contains(@id, 'domstol') or contains(@name, 'domstol')]")))
-            domstol_felt.clear()
-            domstol_felt.send_keys("Romerike og Glåmdal")
+            domstol_dropdown = wait.until(EC.presence_of_element_located((By.NAME, "domstolid")))
+            select = Select(domstol_dropdown)
+            select.select_by_visible_text("Romerike og Glåmdal tingrett")
+            print("Domstol valgt!")
             time.sleep(2)
-            print("Domstol fylt ut!")
         except Exception as e:
-            print(f"Fant ikke domstol-felt: {e}")
-            # Skriv ut alle input-felter for feilsøking
-            felter = driver.find_elements(By.TAG_NAME, "input")
-            for felt in felter:
-                print(f"Input: id='{felt.get_attribute('id')}' name='{felt.get_attribute('name')}' placeholder='{felt.get_attribute('placeholder')}'")
+            print(f"Fant ikke domstol-dropdown: {e}")
+            try:
+                opts = driver.find_elements(By.XPATH, "//select[@name='domstolid']/option")
+                for opt in opts:
+                    print(f"Option: '{opt.text}' value='{opt.get_attribute('value')}'")
+            except Exception as e2:
+                print(f"Fant ikke options: {e2}")
 
         # Klikk på Søk-knappen
         try:
