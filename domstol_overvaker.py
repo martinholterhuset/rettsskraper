@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 # --- KONFIGURASJON ---
-URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-02-16&tilDato=2026-12-31&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000&page=1"
+URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-03-03&tilDato=2026-12-31&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000&page=1"
 CACHE_FILE = Path("cache.json")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_1")
 
