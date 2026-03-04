@@ -80,7 +80,7 @@ def send_slack_varsel(sak_info):
                     {
                         "type": "button",
                         "text": {"type": "plain_text", "text": "Se saken på Domstol.no"},
-                        "url": "https://www.domstol.no/no/nar-gar-rettssaken/",
+                        "url": sak_info['sakslenke'],
                         "style": "primary"
                     },
                     {
@@ -133,6 +133,7 @@ def main():
                 'domstol': sak.get("domstol", ""),
                 'saken_gjelder': sak.get("sakenGjelder") or "–",
                 'parter': sak.get("parter") or sak.get("AdvokaterLang") or "–",
+                'sakslenke': f"https://www.domstol.no/no/nar-gar-rettssaken/?saksid={sak.get('sakId', '')}",
             })
             sendte_saker[saksnr] = datetime.now().isoformat()
 
