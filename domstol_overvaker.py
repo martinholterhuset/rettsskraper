@@ -1,22 +1,33 @@
 import os
 import json
 import urllib.parse
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 # --- KONFIGURASJON ---
-URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-02-14&tilDato=2026-12-31&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000"
+API_BASE = "https://www.domstol.no/api/episerver/v3/beramming"
 CACHE_FILE = Path("cache.json")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_1")
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Referer": "https://www.domstol.no/no/nar-gar-rettssaken/",
+}
+
+def lag_api_params():
+    i_dag = datetime.now()
+    fra_dato = (i_dag - timedelta(days=13)).strftime("%Y-%m-%d")
+    til_dato = (i_dag + timedelta(days=365)).strftime("%Y-%m-%d")
+    return {
+        "fraDato": fra_dato,
+        "tilDato": til_dato,
+        "domstolid": "AAAA2103291207189142069FYGVMW_EJBOrgUnit",
+        "sortTerm": "rettsmoete",
+        "sortAscending": "true",
+        "pageSize": "1000",
+    }
 
 def les_cache():
     if CACHE_FILE.exists():
@@ -69,7 +80,7 @@ def send_slack_varsel(sak_info):
                     {
                         "type": "button",
                         "text": {"type": "plain_text", "text": "Se saken på Domstol.no"},
-                        "url": sak_info['sakslenke'],
+                        "url": "https://www.domstol.no/no/nar-gar-rettssaken/",
                         "style": "primary"
                     },
                     {
@@ -86,69 +97,46 @@ def send_slack_varsel(sak_info):
     print(f"Varsel sendt for: {sak_info['saksnr']} (HTTP {response.status_code})")
 
 def main():
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    )
-
-    # Bruker webdriver-manager for automatisk ChromeDriver-oppsett
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-
     sendte_saker = les_cache()
 
-    try:
-        driver.get(URL)
-        time.sleep(20)  # Økt ventetid for React i CI-miljø
+    response = requests.get(API_BASE, params=lag_api_params(), headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    data = response.json()
 
-        # Ta skjermbilde for debugging hvis noe går galt
-        driver.save_screenshot("before_wait.png")
-        print(f"Sidetittel: {driver.title}")
-        print(f"Side-URL: {driver.current_url}")
+    saker = data.get("hits", [])
+    print(f"Antall saker hentet: {len(saker)} (totalt i basen: {data.get('count', '?')})")
 
-        wait = WebDriverWait(driver, 60)
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+    i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    grense = i_dag + timedelta(days=14)
 
-        rader = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]
-        print(f"Antall rader funnet: {len(rader)}")
+    for sak in saker:
+        saksnr = sak.get("saksnummer", "")
 
-        i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        grense = i_dag + timedelta(days=14)
+        if "TVI" not in saksnr:
+            continue
+        if saksnr in sendte_saker:
+            continue
 
-        for rad in rader:
-            cols = rad.find_elements(By.TAG_NAME, "td")
-            if len(cols) < 5:
-                continue
+        sak_dato = datetime.strptime(sak["startdato"][:10], "%Y-%m-%d")
 
-            saksnr = cols[1].text.strip()
-            if "TVI" in saksnr and saksnr not in sendte_saker:
-                dato_str = cols[0].text.strip().split()[0]
-                sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
+        if i_dag <= sak_dato <= grense:
+            rettsmoete_intervaller = sak.get("rettsmoeteIntervaller", [{}])
+            if rettsmoete_intervaller:
+                intervall = rettsmoete_intervaller[0]
+                rettsmoete_str = f"{intervall.get('start', '')} – {intervall.get('end', '')}"
+            else:
+                rettsmoete_str = sak["startdato"][:10]
 
-                if i_dag <= sak_dato <= grense:
-                    send_slack_varsel({
-                        'rettsmoete': cols[0].text.strip(),
-                        'saksnr': saksnr,
-                        'domstol': cols[2].text.strip(),
-                        'saken_gjelder': cols[3].text.strip(),
-                        'parter': cols[4].text.strip(),
-                        'sakslenke': URL
-                    })
-                    sendte_saker[saksnr] = datetime.now().isoformat()
+            send_slack_varsel({
+                'rettsmoete': rettsmoete_str,
+                'saksnr': saksnr,
+                'domstol': sak.get("domstol", ""),
+                'saken_gjelder': sak.get("sakenGjelder") or "–",
+                'parter': sak.get("parter") or sak.get("AdvokaterLang") or "–",
+            })
+            sendte_saker[saksnr] = datetime.now().isoformat()
 
-        skriv_cache(sendte_saker)
-
-    finally:
-        driver.quit()
+    skriv_cache(sendte_saker)
 
 if __name__ == "__main__":
     main()
