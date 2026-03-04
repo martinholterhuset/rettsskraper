@@ -92,6 +92,11 @@ def main():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    )
 
     # Bruker webdriver-manager for automatisk ChromeDriver-oppsett
     driver = webdriver.Chrome(
@@ -103,9 +108,14 @@ def main():
 
     try:
         driver.get(URL)
-        time.sleep(10)  # Venter på React
+        time.sleep(20)  # Økt ventetid for React i CI-miljø
 
-        wait = WebDriverWait(driver, 30)
+        # Ta skjermbilde for debugging hvis noe går galt
+        driver.save_screenshot("before_wait.png")
+        print(f"Sidetittel: {driver.title}")
+        print(f"Side-URL: {driver.current_url}")
+
+        wait = WebDriverWait(driver, 60)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
         rader = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]
