@@ -2,7 +2,7 @@ import os
 import json
 import urllib.parse
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import requests
 from selenium import webdriver
@@ -29,6 +29,10 @@ def skriv_cache(cache):
         json.dump(cache, f, indent=2)
 
 def send_slack_varsel(sak_info):
+    if not SLACK_WEBHOOK_URL:
+        print("SLACK_WEBHOOK_URL er ikke satt - hopper over varsel")
+        return
+
     mottaker = "romerike.og.glamdal.tingrett@domstol.no"
     emne = f"Innsyn i sluttinnlegg - {sak_info['saksnr']}"
     innhold = f"Hei\n\nRomerikes Blad ber om innsyn i sluttinnleggene i {sak_info['saksnr']}."
@@ -65,7 +69,8 @@ def send_slack_varsel(sak_info):
             }
         ]
     }
-    requests.post(SLACK_WEBHOOK_URL, json=message, timeout=10)
+    response = requests.post(SLACK_WEBHOOK_URL, json=message, timeout=10)
+    print(f"Slack respons: {response.status_code} - {response.text}")
 
 def main():
     options = Options()
@@ -110,9 +115,8 @@ def main():
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
         rader = driver.find_elements(By.CSS_SELECTOR, "table tr")[1:]
-        i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        grense = i_dag + timedelta(days=14)
-        
+        print(f"Antall rader funnet: {len(rader)}")
+
         for rad in rader:
             cols = rad.find_elements(By.TAG_NAME, "td")
             if len(cols) < 5: continue
@@ -123,27 +127,28 @@ def main():
             dato_str = rettsmoete_full.split()[0]
             
             cache_id = f"{saksnr}_{dato_str}"
-            
+
             if "TVI" in saksnr and cache_id not in sendte_varsler:
                 try:
                     try:
                         lenke_element = saksnr_celle.find_element(By.TAG_NAME, "a")
                         sakslenke = lenke_element.get_attribute("href")
                     except:
+                        sakslenke = None
+
+                    if not sakslenke or sakslenke == "None":
                         sakslenke = URL
 
-                    sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
-                    
-                    if i_dag <= sak_dato <= grense:
-                        send_slack_varsel({
-                            'rettsmoete': rettsmoete_full,
-                            'saksnr': saksnr,
-                            'domstol': cols[2].text.strip(),
-                            'saken_gjelder': cols[3].text.strip(),
-                            'parter': cols[4].text.strip(),
-                            'sakslenke': sakslenke
-                        })
-                        sendte_varsler[cache_id] = datetime.now().isoformat()
+                    send_slack_varsel({
+                        'rettsmoete': rettsmoete_full,
+                        'saksnr': saksnr,
+                        'domstol': cols[2].text.strip(),
+                        'saken_gjelder': cols[3].text.strip(),
+                        'parter': cols[4].text.strip(),
+                        'sakslenke': sakslenke
+                    })
+                    sendte_varsler[cache_id] = datetime.now().isoformat()
+                    print(f"Varsel sendt for: {cache_id}")
                 except Exception as e:
                     print(f"Feil ved rad: {e}")
                     
