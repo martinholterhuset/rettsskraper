@@ -11,20 +11,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
-        run: pip install requests selenium webdriver-manager
-      
+        run: pip install requests
+
       - name: Run scraper
         env:
           SLACK_WEBHOOK_1: ${{ secrets.SLACK_WEBHOOK_1 }}
         run: python domstol_overvaker.py
-      
+
       - name: Commit cache updates
         run: |
           git config user.name "github-actions[bot]"
@@ -33,12 +33,3 @@ jobs:
             git add cache.json
             git diff --quiet && git diff --staged --quiet || (git commit -m "Update cache [skip ci]" && git push)
           fi
-
-      - name: Upload screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots
-          path: |
-            before_click.png
-            after_click.png
