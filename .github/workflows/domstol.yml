@@ -17,8 +17,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install requests
+      - name: Installer Python-avhengigheter
+        run: |
+        pip install requests beautifulsoup4 selenium
 
       - name: Run scraper
         env:
