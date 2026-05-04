@@ -11,22 +11,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-
-       name: Installer Python-avhengigheter
+      - name: Installer Python-avhengigheter
         run: |
           pip install requests beautifulsoup4 selenium
-
       - name: Run scraper
         env:
           SLACK_WEBHOOK_1: ${{ secrets.SLACK_WEBHOOK_1 }}
         run: python domstol_overvaker.py
-
       - name: Commit cache updates
         run: |
           git config user.name "github-actions[bot]"
