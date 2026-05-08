@@ -244,8 +244,8 @@ def hent_og_analyser_saker():
                     # Formater rettsmoete-dato
                     rettsmoete = sak_dato.strftime('%d.%m.%Y')
                     
-                    # Bygg sakslenke
-                    sakslenke = f"https://www.domstol.no/no/nar-gar-rettssaken/?fraDato={fra_dato}&tilDato={til_dato}&domstolid={DOMSTOL_ID}&query=TVI"
+                    # Bygg direkte sakslenke
+                    sakslenke = f"https://www.domstol.no/no/nar-gar-rettssaken/?saksid={sak['sakId']}"
                     
                     relevante_saker.append({
                         'rettsmoete': rettsmoete,
