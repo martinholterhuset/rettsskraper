@@ -1,67 +1,53 @@
 #!/usr/bin/env python3
 """
 Overvåker Romerike og Glåmdal tingrett for TVI-saker.
-Kjører automatisk via GitHub Actions hver dag kl 11:00.
+Bruker domstol.no sitt API direkte - raskere og mer pålitelig enn Selenium!
 """
 
 import os
 import json
 import logging
 import urllib.parse
+import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from bs4 import BeautifulSoup
-
 # --- KONFIGURASJON ---
-URL = "https://www.domstol.no/no/nar-gar-rettssaken/?fraDato=2026-01-30&tilDato=2026-12-30&domstolid=AAAA2103291207189142069FYGVMW_EJBOrgUnit&sortTerm=rettsmoete&sortAscending=true&pageSize=1000"
+API_URL = "https://www.domstol.no/api/episerver/v3/beramming"
+DOMSTOL_ID = "AAAA2103291207189142069FYGVMW_EJBOrgUnit"
 
-# Slack webhooks (fra miljøvariabler eller GitHub Secrets)
+# Slack webhooks
 SLACK_WEBHOOK_URLS = []
-for i in range(1, 10):  # Støtter opptil 9 webhooks
+for i in range(1, 10):
     webhook = os.environ.get(f'SLACK_WEBHOOK_{i}')
     if webhook:
         SLACK_WEBHOOK_URLS.append(webhook)
 
-# Logging-konfigurasjon
+# Logging
 LOG_FILE = Path("domstol.log")
 STATUS_FILE = Path("siste_kjoring.txt")
 CACHE_FILE = Path("cache.json")
 
-# Roter logger (maks 5MB, behold 10 filer)
 from logging.handlers import RotatingFileHandler
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-handler = RotatingFileHandler(
-    LOG_FILE,
-    maxBytes=5*1024*1024,  # 5MB
-    backupCount=10
-)
+handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=10)
 handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(handler)
 
-# Logg også til konsoll
 console = logging.StreamHandler()
 console.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console)
 
 
 def les_cache():
-    """Leser cache av tidligere sendte varsler."""
+    """Leser cache."""
     if CACHE_FILE.exists():
         try:
             with open(CACHE_FILE, 'r') as f:
                 data = json.load(f)
-                # Rens gamle oppføringer (eldre enn 60 dager)
                 cutoff = datetime.now() - timedelta(days=60)
                 return {k: v for k, v in data.items() 
                        if datetime.fromisoformat(v) > cutoff}
@@ -73,51 +59,42 @@ def les_cache():
 def skriv_cache(sendte_saker):
     """Lagrer cache."""
     try:
-        logger.info(f"💾 Skriver cache til {CACHE_FILE}")
-        logger.info(f"📊 Cache inneholder {len(sendte_saker)} saker")
         with open(CACHE_FILE, 'w') as f:
             json.dump(sendte_saker, f, indent=2)
-        logger.info(f"✅ Cache lagret vellykket")
-        
-        # Verifiser at filen ble opprettet
-        if os.path.exists(CACHE_FILE):
-            file_size = os.path.getsize(CACHE_FILE)
-            logger.info(f"✓ Cache-fil bekreftet: {file_size} bytes")
-        else:
-            logger.error(f"❌ Cache-fil ble IKKE opprettet!")
+        logger.info(f"✅ Cache lagret ({len(sendte_saker)} saker)")
     except Exception as e:
         logger.error(f"Kunne ikke skrive cache: {e}")
 
 
 def oppdater_status(melding):
-    """Skriver status til fil."""
+    """Skriver status."""
     try:
         with open(STATUS_FILE, 'w') as f:
             f.write(f"{datetime.now().isoformat()}: {melding}\n")
     except Exception as e:
-        logger.warning(f"Kunne ikke skrive statusfil: {e}")
+        logger.warning(f"Kunne ikke skrive status: {e}")
 
 
 def send_slack_varsel(sak_info):
-    """Sender varsel til alle Slack-kanaler med Block Kit formatting."""
+    """Sender varsel til Slack."""
     
     if not SLACK_WEBHOOK_URLS:
-        logger.warning("Ingen Slack webhooks konfigurert - hopper over sending")
+        logger.warning("Ingen Slack webhooks konfigurert")
         return False
     
     mottaker = "romerike.og.glamdal.tingrett@domstol.no"
     
     # Sjekk om det er planleggingsmøte eller hovedforhandling
-    saken_gjelder = sak_info.get('saken_gjelder', '').lower()
+    saken_gjelder = sak_info.get('sakenGjelder', '').lower()
     er_planleggingsmoete = 'planleggingsmøte' in saken_gjelder or 'planleggings møte' in saken_gjelder
     
     if er_planleggingsmoete:
         emne = "Innsyn i rettsbok/referat fra planleggingsmøte"
-        innhold = f"Hei\n\nRomerikes Blad ber om innsyn i rettsbok/referat fra planleggingsmøte i {sak_info['saksnr']}."
+        innhold = f"Hei\n\nRomerikes Blad ber om innsyn i rettsbok/referat fra planleggingsmøte i {sak_info['saksnummer']}."
         moete_type = "Planleggingsmøte"
     else:
         emne = "Innsyn i sluttinnlegg"
-        innhold = f"Hei\n\nRomerikes Blad ber om innsyn i sluttinnleggene i {sak_info['saksnr']}."
+        innhold = f"Hei\n\nRomerikes Blad ber om innsyn i sluttinnleggene i {sak_info['saksnummer']}."
         moete_type = "Hovedforhandling"
     
     gmail_url = (
@@ -127,7 +104,6 @@ def send_slack_varsel(sak_info):
         f"&body={urllib.parse.quote(innhold)}"
     )
 
-    # Bygg meldingen med Block Kit
     message = {
         "blocks": [
             {
@@ -138,9 +114,9 @@ def send_slack_varsel(sak_info):
                         f"🚨 *Ny TVI-sak funnet innen 14 dager!* 🚨\n\n"
                         f"*Type:* {moete_type}\n"
                         f"*Rettsmøte:* {sak_info['rettsmoete']}\n"
-                        f"*Saksnr:* {sak_info['saksnr']}\n"
+                        f"*Saksnr:* {sak_info['saksnummer']}\n"
                         f"*Domstol:* {sak_info['domstol']}\n"
-                        f"*Saken gjelder:* {sak_info['saken_gjelder']}\n"
+                        f"*Saken gjelder:* {sak_info['sakenGjelder']}\n"
                         f"*Parter:* {sak_info['parter']}"
                     )
                 }
@@ -177,7 +153,7 @@ def send_slack_varsel(sak_info):
         try:
             response = requests.post(webhook_url, json=message, timeout=10)
             response.raise_for_status()
-            logger.info(f"✓ Slack-varsel sendt for {sak_info['saksnr']} til kanal {i}")
+            logger.info(f"✓ Slack-varsel sendt for {sak_info['saksnummer']} til kanal {i}")
         except Exception as e:
             logger.error(f"✗ Feil ved Slack-sending til kanal {i}: {e}")
             suksess_totalt = False
@@ -186,13 +162,12 @@ def send_slack_varsel(sak_info):
 
 
 def send_status_varsel(antall_saker, antall_nye):
-    """Sender daglig status-melding til Slack med Block Kit."""
+    """Sender status-melding."""
     
     if not SLACK_WEBHOOK_URLS:
         return False
     
     if antall_nye > 0:
-        # Ikke send status hvis vi allerede har sendt varsler
         return True
     
     message = {
@@ -226,109 +201,80 @@ def send_status_varsel(antall_saker, antall_nye):
 
 
 def hent_og_analyser_saker():
-    """Henter og analyserer saker fra Domstol.no med Selenium."""
+    """Henter saker fra API."""
     
     relevante_saker = []
     
-    # Sett opp Chrome options
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
+    # Beregn datoer
+    i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    fra_dato = i_dag.strftime('%Y-%m-%d')
+    til_dato = (i_dag + timedelta(days=365)).strftime('%Y-%m-%d')
+    grense = i_dag + timedelta(days=14)
     
-    driver = None
+    # Bygg API-forespørsel
+    params = {
+        'fraDato': fra_dato,
+        'tilDato': til_dato,
+        'domstolid': DOMSTOL_ID,
+        'sortTerm': 'rettsmoete',
+        'sortAscending': 'true',
+        'pageSize': '1000',
+        'query': 'TVI'
+    }
     
     try:
-        logger.info("Starter Chrome...")
-        driver = webdriver.Chrome(options=options)
+        logger.info(f"Henter TVI-saker fra API...")
+        response = requests.get(API_URL, params=params, timeout=30)
+        response.raise_for_status()
         
-        # Last siden
-        logger.info(f"Laster side: {URL[:100]}...")
-        driver.get(URL)
+        data = response.json()
+        hits = data.get('hits', [])
         
-        # Vent på at tabellen lastes (maks 30 sekunder)
-        logger.info("Venter på tabell...")
-        wait = WebDriverWait(driver, 30)
-        tabell = wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+        logger.info(f"📊 API returnerte {len(hits)} TVI-saker totalt")
         
-        # Parse HTML
-        html = driver.page_source
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        tabell = soup.find("table")
-        if not tabell:
-            logger.error("Fant ikke tabell i parsed HTML")
-            return []
-        
-        rader = tabell.find_all("tr")[1:]  # Hopp over header
-        logger.info(f"Fant {len(rader)} rader i tabellen")
-        
-        i_dag = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        grense = i_dag + timedelta(days=14)
-        
-        for rad in rader:
-            kolonner = rad.find_all("td")
-            if len(kolonner) < 5:
-                continue
-            
+        # Filtrer saker innen 14 dager
+        for sak in hits:
             try:
-                rettsmoete = kolonner[0].text.strip()
-                saksnr_col = kolonner[1]
-                saksnr = saksnr_col.text.strip()
-                domstol = kolonner[2].text.strip()
-                saken_gjelder = kolonner[3].text.strip()
-                parter = kolonner[4].text.strip()
-                
-                # Hent lenke til saken
-                saksnr_lenke = saksnr_col.find('a')
-                if saksnr_lenke and saksnr_lenke.get('href'):
-                    href = saksnr_lenke['href']
-                    if href.startswith('/'):
-                        sakslenke = f"https://www.domstol.no{href}"
-                    else:
-                        sakslenke = href
-                else:
-                    sakslenke = URL
-                
-                if "TVI" not in saksnr:
-                    continue
-                
-                dato_str = rettsmoete.split()[0]
-                sak_dato = datetime.strptime(dato_str, "%d.%m.%Y")
+                # Parse startdato
+                startdato_str = sak['startdato']  # Format: "2026-04-24T08:30:00"
+                sak_dato = datetime.fromisoformat(startdato_str.replace('Z', '+00:00'))
+                sak_dato = sak_dato.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
                 
                 if i_dag <= sak_dato <= grense:
+                    # Formater rettsmoete-dato
+                    rettsmoete = sak_dato.strftime('%d.%m.%Y')
+                    
+                    # Bygg sakslenke
+                    sakslenke = f"https://www.domstol.no/no/nar-gar-rettssaken/?fraDato={fra_dato}&tilDato={til_dato}&domstolid={DOMSTOL_ID}&query=TVI"
+                    
                     relevante_saker.append({
                         'rettsmoete': rettsmoete,
-                        'saksnr': saksnr,
-                        'domstol': domstol,
-                        'saken_gjelder': saken_gjelder,
-                        'parter': parter,
+                        'saksnummer': sak['saksnummer'],
+                        'domstol': sak['domstol'],
+                        'sakenGjelder': sak['sakenGjelder'],
+                        'parter': sak.get('parter') or sak.get('ParterLang') or 'Ikke oppgitt',
                         'sakslenke': sakslenke
                     })
-                    logger.info(f"✓ Funnet relevant sak: {saksnr} ({dato_str})")
+                    logger.info(f"✓ Funnet relevant sak: {sak['saksnummer']} ({rettsmoete})")
                     
-            except (ValueError, IndexError) as e:
-                logger.debug(f"Hoppet over rad: {e}")
+            except (KeyError, ValueError) as e:
+                logger.debug(f"Hoppet over sak: {e}")
                 continue
-    
-    except TimeoutException:
-        logger.error("Timeout - tabellen lastet ikke i tide")
+        
+        return relevante_saker
+        
+    except requests.RequestException as e:
+        logger.error(f"❌ Feil ved API-kall: {e}")
+        return []
     except Exception as e:
-        logger.error(f"Feil med Selenium: {e}")
-    finally:
-        if driver:
-            driver.quit()
-            logger.info("Chrome lukket")
-    
-    return relevante_saker
+        logger.error(f"❌ Uventet feil: {e}")
+        return []
 
 
 def main():
     """Hovedfunksjon."""
     logger.info("="*70)
-    logger.info("🔍 DOMSTOL-OVERVÅKER STARTER (GitHub Actions)")
+    logger.info("🔍 DOMSTOL-OVERVÅKER STARTER (API-versjon)")
     logger.info(f"Tidspunkt: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Konfigurert med {len(SLACK_WEBHOOK_URLS)} Slack-kanal(er)")
     logger.info("="*70)
@@ -349,13 +295,13 @@ def main():
     
     antall_sendt = 0
     for sak in nye_saker:
-        if sak['saksnr'] not in sendte_saker:
-            logger.info(f"📤 Sender varsel for NY sak: {sak['saksnr']}")
+        if sak['saksnummer'] not in sendte_saker:
+            logger.info(f"📤 Sender varsel for NY sak: {sak['saksnummer']}")
             if send_slack_varsel(sak):
-                sendte_saker[sak['saksnr']] = datetime.now().isoformat()
+                sendte_saker[sak['saksnummer']] = datetime.now().isoformat()
                 antall_sendt += 1
         else:
-            logger.debug(f"Sak {sak['saksnr']} allerede varslet tidligere")
+            logger.debug(f"Sak {sak['saksnummer']} allerede varslet")
     
     if antall_sendt > 0:
         skriv_cache(sendte_saker)
@@ -366,7 +312,6 @@ def main():
         melding = "Ingen nye saker å varsle om"
         logger.info(f"✓ {melding}")
         oppdater_status(melding)
-        # Send daglig status-varsel når ingen nye saker
         send_status_varsel(len(nye_saker), antall_sendt)
     
     logger.info("="*70)
