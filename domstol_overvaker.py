@@ -85,7 +85,7 @@ def send_slack_varsel(sak_info):
     mottaker = "romerike.og.glamdal.tingrett@domstol.no"
     
     # Sjekk om det er planleggingsmøte eller hovedforhandling
-    saken_gjelder = sak_info.get('sakenGjelder', '').lower()
+    saken_gjelder = (sak_info.get('sakenGjelder') or '').lower()
     er_planleggingsmoete = 'planleggingsmøte' in saken_gjelder or 'planleggings møte' in saken_gjelder
     
     if er_planleggingsmoete:
@@ -116,7 +116,7 @@ def send_slack_varsel(sak_info):
                         f"*Rettsmøte:* {sak_info['rettsmoete']}\n"
                         f"*Saksnr:* {sak_info['saksnummer']}\n"
                         f"*Domstol:* {sak_info['domstol']}\n"
-                        f"*Saken gjelder:* {sak_info['sakenGjelder']}\n"
+                        f"*Saken gjelder:* {sak_info.get('sakenGjelder') or 'Ikke oppgitt'}\n"
                         f"*Parter:* {sak_info['parter']}"
                     )
                 }
@@ -251,7 +251,7 @@ def hent_og_analyser_saker():
                         'rettsmoete': rettsmoete,
                         'saksnummer': sak['saksnummer'],
                         'domstol': sak['domstol'],
-                        'sakenGjelder': sak['sakenGjelder'],
+                        'sakenGjelder': sak.get('sakenGjelder') or '',
                         'parter': sak.get('parter') or sak.get('ParterLang') or 'Ikke oppgitt',
                         'sakslenke': sakslenke
                     })
